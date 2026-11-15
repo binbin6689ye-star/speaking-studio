@@ -1,0 +1,15 @@
+{
+  "name": "开口讲粤语",
+  "short_name": "开口讲粤语",
+  "description": "听得明但唔敢讲？跟住读，录低自己把声，对比原声。",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#eef2f5",
+  "theme_color": "#b8402a",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}
