@@ -7,7 +7,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">"
 const shuffle = a => { a = a.slice(); for (let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; };
 
 /* ---------- content ---------- */
-const { S, D, IDS } = window.DATA;                // S: topics, D: word dictionary, IDS: sentence -> audio id
+const { S, D, IDS, MIDS = {} } = window.DATA;     // S: topics, D: word dictionary, IDS: sentence -> audio id, MIDS: meaning line -> audio id
 const INFO = {}, BANK = {}, LABEL = {}, ALL_DAILY = [];
 Object.entries(S).forEach(([k,[label,rows]]) => {
   LABEL[k] = label; BANK[k] = rows.map(r => r[0]);
@@ -169,6 +169,7 @@ function speakFallback(text, rate){
 function say(text, rate){
   rate = rate || store.rate;
   if(IDS[text]) return playSrc(`audio/${store.voice}/${IDS[text]}.mp3`, rate);
+  if(MIDS[text]) return playSrc(`audio/e/${MIDS[text]}.mp3`, rate);
   if(D[gkey(text)] && !/\s/.test(text.trim())) return playSrc(`audio/w/${wid(text)}.mp3`, rate);
   return speakFallback(text, rate);
 }
@@ -288,6 +289,7 @@ function meaningHtml(s){
   const m = INFO[s]; if(!m) return "";
   return `<div class="card"><span class="lab">Meaning</span>
     ${tappableSentence(m.en)}<div class="zh">${esc(m.zh)}</div>
+    ${practiceUI(m.en, "sentence")}
     <p class="small">Who says it: ${esc(m.where)}</p>
     ${m.phrases && m.phrases.length ? `<div class="sec"><span class="lab">Key phrases</span><ul class="plain">${m.phrases.map(p => `<li>${canSpeakAny() ? `<button class="mini" data-speak="${esc(p[0])}">▶</button>` : ""}<b>${esc(p[0])}</b>: ${esc(p[1])} <span class="zh">${esc(p[2])}</span></li>`).join("")}</ul></div>` : ""}
     ${m.sounds ? `<div class="sec"><span class="lab">Sounds like</span><span class="snd">${esc(m.sounds)}</span></div>` : ""}
@@ -379,7 +381,7 @@ async function downloadOffline(){
   const btn = $("#off-dl"), st = $("#off-status"); btn.disabled = true; ensureModel();
   if(!("caches" in window)){ st.textContent = "This browser can't store files for offline use."; return; }
   const urls = [];
-  Object.values(IDS).forEach(id => { urls.push(`audio/f/${id}.mp3`, `audio/m/${id}.mp3`); });
+  Object.values(IDS).forEach(id => { urls.push(`audio/f/${id}.mp3`, `audio/m/${id}.mp3`, `audio/e/${id}.mp3`); });
   Object.keys(D).forEach(w => urls.push(`audio/w/${wid(w)}.mp3`));
   const cache = await caches.open("ss-media-v1"); let done = 0;
   const queue = urls.slice(); const workers = Array.from({length:6}, async () => {
@@ -582,7 +584,12 @@ function renderInstall(){
   const di = $("#do-install"); if(di) di.onclick = async () => { deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; c.hidden = true; };
   $("#hide-install").onclick = () => { store.installDismissed = true; saveStore(); c.hidden = true; };
 }
-if("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) navigator.serviceWorker.register("sw.js").catch(()=>{});
+if("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")){
+  // When a new version is published, the new service worker takes over and the page reloads once to show it.
+  const hadController = !!navigator.serviceWorker.controller; let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if(hadController && !reloaded){ reloaded = true; location.reload(); } });
+  navigator.serviceWorker.register("sw.js").then(r => r.update()).catch(()=>{});
+}
 if(store.modelReady) ensureModel();    // warm up the scoring model if it was downloaded before
 
 /* ---------- start ---------- */
