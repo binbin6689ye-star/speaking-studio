@@ -1,0 +1,22 @@
+SPEAKING STUDIO - PHONE APP (works offline, no Claude, no Google)
+
+This folder is a complete web app. To install it on a phone, it must be served from an https web address.
+Upload the WHOLE folder (keep the structure) to any static web host:
+
+  Option A - GitHub Pages (free):
+    1. Create a free account at github.com
+    2. New repository -> name it speaking-studio -> upload all files in this folder
+    3. Settings -> Pages -> Branch: main -> Save
+    4. Your app: https://YOUR-NAME.github.io/speaking-studio/
+
+  Option B - Netlify / Cloudflare Pages / Vercel (free): drag this folder into their "deploy" page.
+
+  For users in mainland China: GitHub Pages and Netlify usually open but can be slow.
+  For reliable China access, host on a China cloud (Alibaba Cloud OSS or Tencent COS static website).
+
+Then on the phone:
+  iPhone (Safari): open the link -> Share -> Add to Home Screen
+  Android (Chrome / most browsers): open the link -> menu -> Install app / Add to Home screen
+
+First use: tap Record once; the app downloads its scoring model (41 MB, one time).
+Settings -> "Download everything for offline use" stores all audio so it works with no internet.
