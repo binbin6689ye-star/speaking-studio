@@ -287,7 +287,7 @@ function tappableSentence(s){
 function meaningHtml(s){
   const m = INFO[s]; if(!m) return "";
   return `<div class="card"><span class="lab">Meaning</span>
-    <div>${esc(m.en)}</div><div class="zh">${esc(m.zh)}</div>
+    ${tappableSentence(m.en)}<div class="zh">${esc(m.zh)}</div>
     <p class="small">Who says it: ${esc(m.where)}</p>
     ${m.phrases && m.phrases.length ? `<div class="sec"><span class="lab">Key phrases</span><ul class="plain">${m.phrases.map(p => `<li>${canSpeakAny() ? `<button class="mini" data-speak="${esc(p[0])}">▶</button>` : ""}<b>${esc(p[0])}</b>: ${esc(p[1])} <span class="zh">${esc(p[2])}</span></li>`).join("")}</ul></div>` : ""}
     ${m.sounds ? `<div class="sec"><span class="lab">Sounds like</span><span class="snd">${esc(m.sounds)}</span></div>` : ""}
@@ -417,6 +417,28 @@ document.addEventListener("click", async e => {
   const del = t.closest("[data-del]"); if(del){ await dbDel(+del.dataset.del); renderHistory(); return; }
 });
 
+/* ---------- hover pop-up on computers (phones use tap → bottom sheet) ---------- */
+const canHover = window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+if(canHover){
+  const tip = document.createElement("div"); tip.id = "hover-tip"; tip.hidden = true; tip.setAttribute("role","tooltip"); document.body.appendChild(tip);
+  let showT = null, hideT = null, tipFor = null;
+  const place = el => { tip.hidden = false; const r = el.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight, vw = document.documentElement.clientWidth;
+    let left = Math.max(8, Math.min(r.left + r.width/2 - tw/2, vw - tw - 8)), top = r.top - th - 8; if(top < 8) top = r.bottom + 8;
+    tip.style.left = (left + scrollX) + "px"; tip.style.top = (top + scrollY) + "px"; };
+  const show = el => {
+    const k = gkey(el.dataset.word), g = D[k], c = el.closest("[data-ctx]"), info = c ? INFO[c.dataset.ctx] : null;
+    const phrase = info && info.phrases ? info.phrases.find(p => p[0].toLowerCase().split(/\s+/).map(gkey).includes(k)) : null;
+    tip.innerHTML = `<div class="row"><b>${esc(k)}</b>${g ? `<span class="snd">${esc(g[2])}</span>` : ""}</div>
+      ${g ? `<div>${esc(g[0])}</div><div class="zh">${esc(g[1])}</div>` : `<div class="small">No dictionary entry.</div>`}
+      ${phrase ? `<div class="ph">Part of <b>${esc(phrase[0])}</b>: ${esc(phrase[1])} <span class="zh">${esc(phrase[2])}</span></div>` : ""}
+      <div class="small">Click for audio and practice</div>`;
+    tipFor = el; place(el);
+  };
+  document.addEventListener("mouseover", e => { const el = e.target.closest("[data-word]"); if(!el || el === tipFor) return; clearTimeout(hideT); clearTimeout(showT); showT = setTimeout(() => show(el), 200); });
+  document.addEventListener("mouseout", e => { if(!e.target.closest("[data-word]")) return; clearTimeout(showT); hideT = setTimeout(() => { tip.hidden = true; tipFor = null; }, 150); });
+  document.addEventListener("click", () => { tip.hidden = true; tipFor = null; }, true);
+}
+
 /* ---------- tabs & topic ---------- */
 const state = {tab:"listen", topic: store.topic || "d-mix", sets:{}, idx:{}};
 const sel = $("#topic");
@@ -451,7 +473,7 @@ function lisCheck(){
   const s = cur(), r = compare(s, typed);
   const verdict = r.score===100 ? "Perfect." : r.score>=90 ? "Very close." : r.score>=70 ? "Good start. Replay slower and listen for the red words." : "Tough one. Replay it slowly a few times.";
   $("#lis-result").innerHTML = `<div class="card"><div class="verdict"><span class="score ${scoreClass(r.score)}">${r.score}%</span><span>${verdict}</span></div>
-      ${wordsHtml(r)}<p class="small">Tap any word for its meaning.</p></div>
+      ${wordsHtml(r)}<p class="small">${window.matchMedia && matchMedia("(hover: hover) and (pointer: fine)").matches ? "Hover over any word for its meaning; click for audio and practice." : "Tap any word for its meaning, audio and practice."}</p></div>
     ${meaningHtml(s)}
     <div class="card"><span class="lab">Now say it yourself</span>${practiceUI(s, "sentence")}</div>`;
   logRep(r.score); markPracticed(s);

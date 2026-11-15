@@ -1,5 +1,5 @@
 // Offline support: the app shell is cached on install; audio, the speech model and engine files are cached the first time they're used.
-const SHELL = "ss-shell-v1", MEDIA = "ss-media-v1";
+const SHELL = "ss-shell-v2", MEDIA = "ss-media-v1";
 const FILES = ["./", "./index.html", "./app.css", "./app.js", "./data.js", "./stt-worker.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./vendor/transformers.min.js"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(SHELL).then(c => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener("activate", e => e.waitUntil((async () => {
