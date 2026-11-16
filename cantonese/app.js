@@ -39,8 +39,6 @@ const byTopic = t => Object.values(ITEMS).filter(x => t === "mix" || x.topic ===
 /* what the voice reads: for 歇后语 both halves (with the pun's real word, not the bracketed one) */
 const spoken = it => it.a ? `${it.text}，${it.a.replace(/（.*?）/g, "")}` : it.text;
 const fullText = it => it.a ? `${it.text}——${it.a}` : it.text;
-const AUD = {};
-Object.values(ITEMS).forEach(it => { if(it.a){ AUD[it.text] = it.id + "-q"; AUD[spoken(it)] = it.id; } else AUD[it.text] = it.id; });
 
 /* ---------- storage ---------- */
 const SKEY = "yueApp.v1";
@@ -79,7 +77,7 @@ function findVoice(){
 function renderVoiceCard(){
   yueVoice = findVoice();
   const c = $("#voice-card");
-  if(true){ c.hidden = true; return; }   // audio is bundled now, so no voice pack is needed
+  if(yueVoice){ c.hidden = true; return; }
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   c.hidden = false;
   c.innerHTML = `<span class="lab">部手机未有粤语把声</span>
@@ -89,26 +87,11 @@ function renderVoiceCard(){
     <p class="small">未装都可以照用：睇字同粤拼、录音、听返自己把声。</p>`;
 }
 if(window.speechSynthesis){ speechSynthesis.onvoiceschanged = renderVoiceCard; }
-/* plays the bundled Cantonese recording; falls back to the phone's voice only if a file is missing */
 function say(text, rate){
-  if(AUD[text]) return new Promise(res => {
-    stopAudio();
-    const a = new Audio(`audio/${AUD[text]}.mp3`); a.playbackRate = rate || store.rate; a.preservesPitch = true; a.webkitPreservesPitch = true;
-    const slow = setTimeout(() => toast("载入紧声音…"), 350);
-    const fail = setTimeout(() => toast("声音载入唔到，网络可能慢，等阵再撳。", 5000), 10000);
-    const done = () => { clearTimeout(slow); clearTimeout(fail); };
-    a.onplaying = () => { done(); hideToast(); };
-    a.onended = () => { done(); res(); };
-    a.onerror = () => { done(); toast("声音播唔到，检查下网络再试。", 4000); res(); };
-    player = a; a.play().catch(() => { done(); res(); });
-  });
-  return sayTTS(text, rate);
-}
-function sayTTS(text, rate){
   return new Promise(res => {
     if(!window.speechSynthesis){ toast("呢个浏览器读唔到声，试下用 Chrome 或 Edge 打开。", 4000); res(); return; }
     if(!yueVoice) yueVoice = findVoice();
-    if(!yueVoice){ toast("呢句暂时未有声音。", 3000); res(); return; }
+    if(!yueVoice){ toast("部手机未有粤语语音，睇最上面嘅教学装一把先。", 4000); const c = $("#voice-card"); if(c) c.scrollIntoView({behavior:"smooth"}); res(); return; }
     stopAudio();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = yueVoice ? yueVoice.lang : "zh-HK"; if(yueVoice) u.voice = yueVoice;
@@ -261,11 +244,11 @@ $("#open-settings").onclick = () => {
   $("#settings-sheet").innerHTML = `<div class="grab"></div><div class="sheet-head"><h2 id="set-title">设定</h2><button data-close>关闭</button></div>
     <div class="sec"><span class="lab">语速 <span id="rate-val">${store.rate.toFixed(2)}×</span></span>
       <input type="range" id="rate" min="0.6" max="1.2" step="0.05" value="${store.rate}" aria-label="语速"></div>
-    <div class="sec"><span class="lab">粤语把声</span><p class="small">声音已经内置，唔使装任何嘢。</p><button id="test-voice">试听</button></div>
+    <div class="sec"><span class="lab">粤语把声</span><p class="small">${yueVoice ? `而家用紧：${esc(yueVoice.name)}` : "部手机未有粤语语音，睇上面嘅教学装一把。"}</p><button id="test-voice">试听</button></div>
     <div class="sec"><span class="lab">资料</span><p class="small">录音同进度只会存喺呢部手机。</p><button id="clear-all" class="wide">删除所有录音同进度</button></div>`;
   $("#settings-sheet").hidden = false; $("#sheet-bg").hidden = false;
   $("#rate").oninput = e => { store.rate = +e.target.value; $("#rate-val").textContent = store.rate.toFixed(2)+"×"; saveStore(); };
-  $("#test-voice").onclick = () => say(ITEMS["work-0"].text);
+  $("#test-voice").onclick = () => say("早晨！今日食咗饭未呀？");
   let armed = false;
   $("#clear-all").onclick = async e => { if(!armed){ armed = true; e.currentTarget.textContent = "再撳一次确认删除"; return; }
     await dbClear(); store = {days:{}, practiced:{}, reviewed:{}, rate:store.rate, showJp:store.showJp}; saveStore(); renderStats(); updateReviewBanner(); closeSheet(); };
@@ -291,7 +274,7 @@ function renderInstall(){
   if(IN_APP){
     c.hidden = false; c.classList.add("inapp");
     if(store.inAppDismissed){ c.hidden = true; return; }
-    c.innerHTML = `<p class="small">喺微信／QQ／小红书入面开，听得到但未必录到音。想录音就撳右上角 <b>···</b> →「在浏览器打开」。</p><button id="hide-inapp">知道喇</button>`;
+    c.innerHTML = `<p class="small">喺微信／QQ／小红书入面开，读声同录音可能用唔到。撳右上角 <b>···</b> →「在浏览器打开」。</p><button id="hide-inapp">知道喇</button>`;
     $("#hide-inapp").onclick = () => { store.inAppDismissed = true; saveStore(); c.hidden = true; };
     return;
   }
