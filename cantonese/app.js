@@ -69,10 +69,16 @@ const dbClear = () => dbDo("readwrite", s => s.clear());
 
 /* ---------- the phone's Cantonese voice ---------- */
 let yueVoice = null;
+function yueVoices(){
+  if(!window.speechSynthesis) return [];
+  const vs = speechSynthesis.getVoices().filter(v => /^(zh[-_]HK|yue)/i.test(v.lang) || /cantonese|粤|粵|廣東|广东|hong ?kong|香港/i.test(v.name));
+  // Edge's "Natural"/"Online" voices sound most human, then Google's, then the device's own
+  const rank = v => /natural/i.test(v.name) ? 0 : /online/i.test(v.name) ? 1 : /google/i.test(v.name) ? 2 : 3;
+  return vs.sort((a, b) => rank(a) - rank(b));
+}
 function findVoice(){
-  if(!window.speechSynthesis) return null;
-  const vs = speechSynthesis.getVoices();
-  return vs.find(v => /^(zh[-_]HK|yue)/i.test(v.lang)) || vs.find(v => /cantonese|粤|粵|廣東|广东|hong kong|香港/i.test(v.name)) || null;
+  const vs = yueVoices();
+  return vs.find(v => v.name === store.voiceName) || vs[0] || null;
 }
 function renderVoiceCard(){
   yueVoice = findVoice();
@@ -81,17 +87,24 @@ function renderVoiceCard(){
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   c.hidden = false;
   c.innerHTML = `<span class="lab">部手机未有粤语把声</span>
+    <p class="small"><b>最快：用电脑开呢个网址</b>（Edge 或者 Chrome），唔使装嘢就听得到。中国大陆请用 Edge。</p>
+    <div class="row"><button id="copy-url">复制网址</button><span class="small" id="copy-ok"></span></div>
+    <p class="small">或者喺手机装粤语语音：</p>
     <p class="small">要装咗粤语语音先可以读出嚟（一次过，免费）：</p>
     ${ios ? `<ol class="small"><li>打开「设定」→「辅助使用」→「朗读内容」→「声音」</li><li>拣「中文」→「中文（香港）」，下载一把声（例如 Sinji）</li><li>返嚟呢度重新打开</li></ol>`
           : `<ol class="small"><li>打开「设定」，搜寻「文字转语音」</li><li>引擎拣「Google 语音服务」→ 安装语音数据 →「粤语（香港）」</li><li>冇 Google 嘅手机：喺应用商店装「Google 语音服务」或者用 Edge 浏览器</li><li>返嚟呢度重新打开</li></ol>`}
     <p class="small">未装都可以照用：睇字同粤拼、录音、听返自己把声。</p>`;
+  const cu = $("#copy-url");
+  if(cu) cu.onclick = () => { const u = location.href.split("#")[0];
+    (navigator.clipboard ? navigator.clipboard.writeText(u) : Promise.reject()).then(() => { $("#copy-ok").textContent = "复制咗，发去电脑开就得。"; })
+      .catch(() => { $("#copy-ok").textContent = u; }); };
 }
 if(window.speechSynthesis){ speechSynthesis.onvoiceschanged = renderVoiceCard; }
 function say(text, rate){
   return new Promise(res => {
     if(!window.speechSynthesis){ toast("呢个浏览器读唔到声，试下用 Chrome 或 Edge 打开。", 4000); res(); return; }
     if(!yueVoice) yueVoice = findVoice();
-    if(!yueVoice){ toast("部手机未有粤语语音，睇最上面嘅教学装一把先。", 4000); const c = $("#voice-card"); if(c) c.scrollIntoView({behavior:"smooth"}); res(); return; }
+    if(!yueVoice){ toast("部手机未有粤语语音：用电脑嘅 Edge／Chrome 开就听得到，或者睇最上面教学装一把。", 5000); const c = $("#voice-card"); if(c) c.scrollIntoView({behavior:"smooth"}); res(); return; }
     stopAudio();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = yueVoice ? yueVoice.lang : "zh-HK"; if(yueVoice) u.voice = yueVoice;
@@ -244,10 +257,14 @@ $("#open-settings").onclick = () => {
   $("#settings-sheet").innerHTML = `<div class="grab"></div><div class="sheet-head"><h2 id="set-title">设定</h2><button data-close>关闭</button></div>
     <div class="sec"><span class="lab">语速 <span id="rate-val">${store.rate.toFixed(2)}×</span></span>
       <input type="range" id="rate" min="0.6" max="1.2" step="0.05" value="${store.rate}" aria-label="语速"></div>
-    <div class="sec"><span class="lab">粤语把声</span><p class="small">${yueVoice ? `而家用紧：${esc(yueVoice.name)}` : "部手机未有粤语语音，睇上面嘅教学装一把。"}</p><button id="test-voice">试听</button></div>
+    <div class="sec"><span class="lab">粤语把声</span>
+      ${yueVoices().length ? `<select id="voice-pick" aria-label="粤语把声">${yueVoices().map(v => `<option value="${esc(v.name)}" ${yueVoice && v.name === yueVoice.name ? "selected" : ""}>${esc(v.name.replace(/^Microsoft |^Google /, "").replace(/ - .*$/, ""))}</option>`).join("")}</select>`
+        : `<p class="small">呢部机未有粤语语音。用电脑嘅 Edge／Chrome 开，或者睇上面教学装一把。</p>`}
+      <button id="test-voice">试听</button></div>
     <div class="sec"><span class="lab">资料</span><p class="small">录音同进度只会存喺呢部手机。</p><button id="clear-all" class="wide">删除所有录音同进度</button></div>`;
   $("#settings-sheet").hidden = false; $("#sheet-bg").hidden = false;
   $("#rate").oninput = e => { store.rate = +e.target.value; $("#rate-val").textContent = store.rate.toFixed(2)+"×"; saveStore(); };
+  const vp = $("#voice-pick"); if(vp) vp.onchange = e => { store.voiceName = e.target.value; saveStore(); yueVoice = findVoice(); say("早晨！今日食咗饭未呀？"); };
   $("#test-voice").onclick = () => say("早晨！今日食咗饭未呀？");
   let armed = false;
   $("#clear-all").onclick = async e => { if(!armed){ armed = true; e.currentTarget.textContent = "再撳一次确认删除"; return; }
