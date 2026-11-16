@@ -602,10 +602,12 @@ function renderInstall(){
   const c = $("#install-card");
   if(IN_APP){   // WeChat / QQ / Xiaohongshu in-app browsers block recording and installing
     c.hidden = false; c.classList.add("inapp");
-    c.innerHTML = `<span class="lab">Open in your browser</span>
-      <p class="small">You're inside an app's built-in browser, where recording and installing don't work. Tap <b>···</b> at the top right, then <b>在浏览器打开 / Open in browser</b>.</p>`;
+    if(store.inAppDismissed){ c.hidden = true; return; }
+    c.innerHTML = `<p class="small">You're in WeChat/QQ's built-in browser: listening works, but recording may not. To record, tap <b>···</b> (top right) → <b>在浏览器打开 / Open in browser</b>.</p><button id="hide-inapp">Got it</button>`;
+    $("#hide-inapp").onclick = () => { store.inAppDismissed = true; saveStore(); c.hidden = true; };
     return;
   }
+  c.hidden = true; return;   // no "install the app" prompt
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   // Android: only show the card when the browser offers a real Install button (manual steps confused people)
   if(standalone || store.installDismissed || (!ios && !deferredPrompt)){ c.hidden = true; return; }
