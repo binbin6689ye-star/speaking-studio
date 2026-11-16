@@ -2,6 +2,26 @@
    Content (sentences, meanings, Chinese, word glosses) and American audio are bundled.
    Scoring runs Whisper on the phone in a Web Worker. Your voice recordings stay in IndexedDB on the phone. */
 "use strict";
+var FATAL_TEXT = "Something went wrong on this phone's browser. Please screenshot this and send it to the developer";
+/* ---------- safety net for older / in-app Android browsers ---------- */
+if(!Array.prototype.flatMap) Array.prototype.flatMap = function(f, t){ return [].concat.apply([], this.map(f, t)); };
+if(!Object.fromEntries) Object.fromEntries = function(it){ var o = {}; Array.from(it).forEach(function(p){ o[p[0]] = p[1]; }); return o; };
+function showFatal(msg){
+  var b = document.getElementById("fatal");
+  if(!b){ b = document.createElement("div"); b.id = "fatal"; b.className = "fatal"; document.body.insertBefore(b, document.body.firstChild); }
+  b.textContent = FATAL_TEXT + " (" + msg + ")";
+}
+window.addEventListener("error", function(e){ if(e && e.message) showFatal(e.message); });
+var toastT = null;
+function toast(msg, ms){
+  var t = document.getElementById("toast");
+  if(!t){ t = document.createElement("div"); t.id = "toast"; t.className = "toast"; t.setAttribute("role","status"); document.body.appendChild(t); }
+  t.textContent = msg; t.hidden = false; clearTimeout(toastT);
+  if(ms) toastT = setTimeout(function(){ t.hidden = true; }, ms);
+}
+function hideToast(){ var t = document.getElementById("toast"); if(t) t.hidden = true; clearTimeout(toastT); }
+var IN_APP = /MicroMessenger|QQ\/|MQQBrowser.*QQ|Weibo|DingTalk|AlipayClient|XiaoHongShu|aweme|Douyin/i.test(navigator.userAgent);
+
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const shuffle = a => { a = a.slice(); for (let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; };
@@ -154,7 +174,14 @@ function playSrc(src, rate){
   return new Promise(res => {
     stopAudio();
     const a = new Audio(src); a.playbackRate = rate || 1; a.preservesPitch = true; a.webkitPreservesPitch = true;
-    a.onended = res; a.onerror = res; player = a; a.play().catch(res);
+    // show that the tap worked while audio downloads; explain if it never arrives
+    const slow = setTimeout(() => toast("Loading audio…"), 350);
+    const fail = setTimeout(() => toast("The audio didn't load. Your connection may be slow; tap again in a moment.", 5000), 10000);
+    const done = () => { clearTimeout(slow); clearTimeout(fail); };
+    a.onplaying = () => { done(); hideToast(); };
+    a.onended = () => { done(); res(); };
+    a.onerror = () => { done(); toast("The audio couldn't play. Check your connection and try again.", 4000); res(); };
+    player = a; a.play().catch(() => { done(); res(); });
   });
 }
 const wid = w => gkey(w).replace(/[^a-z0-9]/g, "_");
@@ -573,8 +600,15 @@ const standalone = window.matchMedia("(display-mode: standalone)").matches || na
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredPrompt = e; renderInstall(); });
 function renderInstall(){
   const c = $("#install-card");
-  if(standalone || store.installDismissed){ c.hidden = true; return; }
+  if(IN_APP){   // WeChat / QQ / Xiaohongshu in-app browsers block recording and installing
+    c.hidden = false; c.classList.add("inapp");
+    c.innerHTML = `<span class="lab">Open in your browser</span>
+      <p class="small">You're inside an app's built-in browser, where recording and installing don't work. Tap <b>···</b> at the top right, then <b>在浏览器打开 / Open in browser</b>.</p>`;
+    return;
+  }
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  // Android: only show the card when the browser offers a real Install button (manual steps confused people)
+  if(standalone || store.installDismissed || (!ios && !deferredPrompt)){ c.hidden = true; return; }
   c.hidden = false;
   c.innerHTML = `<span class="lab">Install the app</span>
     ${deferredPrompt ? `<p class="small">Add Speaking Studio to your home screen. It opens like a normal app and works offline.</p><button class="primary" id="do-install">Install</button>`

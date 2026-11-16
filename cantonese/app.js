@@ -2,6 +2,26 @@
    Listen with the phone's own Cantonese voice, read along with Jyutping, record yourself, compare.
    No scoring, no server: recordings stay on the phone (IndexedDB). */
 "use strict";
+var FATAL_TEXT = "部手机嘅浏览器出咗问题，请截图发俾开发者";
+/* ---------- safety net for older / in-app Android browsers ---------- */
+if(!Array.prototype.flatMap) Array.prototype.flatMap = function(f, t){ return [].concat.apply([], this.map(f, t)); };
+if(!Object.fromEntries) Object.fromEntries = function(it){ var o = {}; Array.from(it).forEach(function(p){ o[p[0]] = p[1]; }); return o; };
+function showFatal(msg){
+  var b = document.getElementById("fatal");
+  if(!b){ b = document.createElement("div"); b.id = "fatal"; b.className = "fatal"; document.body.insertBefore(b, document.body.firstChild); }
+  b.textContent = FATAL_TEXT + " (" + msg + ")";
+}
+window.addEventListener("error", function(e){ if(e && e.message) showFatal(e.message); });
+var toastT = null;
+function toast(msg, ms){
+  var t = document.getElementById("toast");
+  if(!t){ t = document.createElement("div"); t.id = "toast"; t.className = "toast"; t.setAttribute("role","status"); document.body.appendChild(t); }
+  t.textContent = msg; t.hidden = false; clearTimeout(toastT);
+  if(ms) toastT = setTimeout(function(){ t.hidden = true; }, ms);
+}
+function hideToast(){ var t = document.getElementById("toast"); if(t) t.hidden = true; clearTimeout(toastT); }
+var IN_APP = /MicroMessenger|QQ\/|MQQBrowser.*QQ|Weibo|DingTalk|AlipayClient|XiaoHongShu|aweme|Douyin/i.test(navigator.userAgent);
+
 const $ = s => document.querySelector(s);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const shuffle = a => { a = a.slice(); for (let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]];} return a; };
@@ -69,7 +89,9 @@ function renderVoiceCard(){
 if(window.speechSynthesis){ speechSynthesis.onvoiceschanged = renderVoiceCard; }
 function say(text, rate){
   return new Promise(res => {
-    if(!window.speechSynthesis){ res(); return; }
+    if(!window.speechSynthesis){ toast("呢个浏览器读唔到声，试下用 Chrome 或 Edge 打开。", 4000); res(); return; }
+    if(!yueVoice) yueVoice = findVoice();
+    if(!yueVoice){ toast("部手机未有粤语语音，睇最上面嘅教学装一把先。", 4000); const c = $("#voice-card"); if(c) c.scrollIntoView({behavior:"smooth"}); res(); return; }
     stopAudio();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = yueVoice ? yueVoice.lang : "zh-HK"; if(yueVoice) u.voice = yueVoice;
@@ -249,8 +271,13 @@ const standalone = window.matchMedia("(display-mode: standalone)").matches || na
 window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredPrompt = e; renderInstall(); });
 function renderInstall(){
   const c = $("#install-card");
-  if(standalone || store.installDismissed){ c.hidden = true; return; }
+  if(IN_APP){
+    c.hidden = false; c.classList.add("inapp");
+    c.innerHTML = `<span class="lab">请用浏览器打开</span><p class="small">喺微信／QQ／小红书入面开，录音同读声都用唔到。撳右上角 <b>···</b> →「在浏览器打开」。</p>`;
+    return;
+  }
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if(standalone || store.installDismissed || (!ios && !deferredPrompt)){ c.hidden = true; return; }
   c.hidden = false;
   c.innerHTML = `<span class="lab">加到主画面（可以唔加）</span>
     ${deferredPrompt ? `<button class="primary" id="do-install">安装</button>` : ios ? `<p class="small">Safari 下面撳「分享」→「加至主画面」。</p>` : `<p class="small">浏览器选单（⋮）→「安装应用程式」或「加到主画面」。</p>`}
