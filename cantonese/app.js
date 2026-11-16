@@ -106,7 +106,8 @@ function say(text, rate){
     if(!yueVoice) yueVoice = findVoice();
     if(!yueVoice){ toast("部手机未有粤语语音：用电脑嘅 Edge／Chrome 开就听得到，或者睇最上面教学装一把。", 5000); const c = $("#voice-card"); if(c) c.scrollIntoView({behavior:"smooth"}); res(); return; }
     stopAudio();
-    const u = new SpeechSynthesisUtterance(text);
+    // speak the Hong Kong traditional version: Cantonese voices misread polyphonic simplified characters (系/發/沖…)
+    const u = new SpeechSynthesisUtterance((YUE.tts && YUE.tts[text]) || text);
     u.lang = yueVoice ? yueVoice.lang : "zh-HK"; if(yueVoice) u.voice = yueVoice;
     u.rate = rate || store.rate; u.onend = res; u.onerror = res;
     speechSynthesis.speak(u);
