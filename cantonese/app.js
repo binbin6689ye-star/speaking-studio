@@ -39,6 +39,21 @@ const byTopic = t => Object.values(ITEMS).filter(x => t === "mix" || x.topic ===
 /* what the voice reads: for 歇后语 both halves (with the pun's real word, not the bracketed one) */
 const spoken = it => it.a ? `${it.text}，${it.a.replace(/（.*?）/g, "")}` : it.text;
 const fullText = it => it.a ? `${it.text}——${it.a}` : it.text;
+/* K's own recordings: every line plays from a bundled file, so no voice pack is needed */
+const AUD = {};
+Object.values(ITEMS).forEach(it => { if(it.a){ AUD[it.text] = [it.id + "-q"]; AUD[spoken(it)] = [it.id + "-q", it.id + "-a"]; } else AUD[it.text] = [it.id]; });
+function playFile(name, rate){
+  return new Promise(res => {
+    const a = new Audio(`audio/${name}.mp3`); a.playbackRate = rate; a.preservesPitch = true; a.webkitPreservesPitch = true;
+    const slow = setTimeout(() => toast("载入紧声音…"), 350);
+    const fail = setTimeout(() => toast("声音载入唔到，网络可能慢，等阵再撳。", 5000), 10000);
+    const done = () => { clearTimeout(slow); clearTimeout(fail); };
+    a.onplaying = () => { done(); hideToast(); };
+    a.onended = () => { done(); res(true); };
+    a.onerror = () => { done(); toast("声音播唔到，检查下网络再试。", 4000); res(false); };
+    player = a; a.play().catch(() => { done(); res(false); });
+  });
+}
 
 /* ---------- storage ---------- */
 const SKEY = "yueApp.v1";
@@ -83,7 +98,7 @@ function findVoice(){
 function renderVoiceCard(){
   yueVoice = findVoice();
   const c = $("#voice-card");
-  if(yueVoice){ c.hidden = true; return; }
+  if(true){ c.hidden = true; return; }   // every line has a recording now
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   c.hidden = false;
   c.innerHTML = `<span class="lab">部手机未有粤语把声</span>
@@ -101,6 +116,17 @@ function renderVoiceCard(){
 }
 if(window.speechSynthesis){ speechSynthesis.onvoiceschanged = renderVoiceCard; }
 function say(text, rate){
+  if(AUD[text]) return (async () => {
+    stopAudio(); const myTurn = (window._sayTurn = (window._sayTurn || 0) + 1);
+    for(const [i, f] of AUD[text].entries()){
+      if(window._sayTurn !== myTurn) return;          // a newer tap took over
+      if(i) await new Promise(r => setTimeout(r, 350));   // short pause between the two halves of a 歇后语
+      if(!(await playFile(f, rate || store.rate))) return;
+    }
+  })();
+  return sayTTS(text, rate);
+}
+function sayTTS(text, rate){
   return new Promise(res => {
     if(!window.speechSynthesis){ toast("呢个浏览器读唔到声，试下用 Chrome 或 Edge 打开。", 4000); res(); return; }
     if(!yueVoice) yueVoice = findVoice();
@@ -259,14 +285,15 @@ $("#open-settings").onclick = () => {
     <div class="sec"><span class="lab">语速 <span id="rate-val">${store.rate.toFixed(2)}×</span></span>
       <input type="range" id="rate" min="0.6" max="1.2" step="0.05" value="${store.rate}" aria-label="语速"></div>
     <div class="sec"><span class="lab">粤语把声</span>
-      ${yueVoices().length ? `<select id="voice-pick" aria-label="粤语把声">${yueVoices().map(v => `<option value="${esc(v.name)}" ${yueVoice && v.name === yueVoice.name ? "selected" : ""}>${esc(v.name.replace(/^Microsoft |^Google /, "").replace(/ - .*$/, ""))}</option>`).join("")}</select>`
+      <p class="small">所有句子都系真人录音，任何手机都听得到，唔使装语音。</p>
+      ${false ? `<select id="voice-pick" aria-label="粤语把声">${yueVoices().map(v => `<option value="${esc(v.name)}" ${yueVoice && v.name === yueVoice.name ? "selected" : ""}>${esc(v.name.replace(/^Microsoft |^Google /, "").replace(/ - .*$/, ""))}</option>`).join("")}</select>`
         : `<p class="small">呢部机未有粤语语音。用电脑嘅 Edge／Chrome 开，或者睇上面教学装一把。</p>`}
       <button id="test-voice">试听</button></div>
     <div class="sec"><span class="lab">资料</span><p class="small">录音同进度只会存喺呢部手机。</p><button id="clear-all" class="wide">删除所有录音同进度</button></div>`;
   $("#settings-sheet").hidden = false; $("#sheet-bg").hidden = false;
   $("#rate").oninput = e => { store.rate = +e.target.value; $("#rate-val").textContent = store.rate.toFixed(2)+"×"; saveStore(); };
   const vp = $("#voice-pick"); if(vp) vp.onchange = e => { store.voiceName = e.target.value; saveStore(); yueVoice = findVoice(); say("早晨！今日食咗饭未呀？"); };
-  $("#test-voice").onclick = () => say("早晨！今日食咗饭未呀？");
+  $("#test-voice").onclick = () => say(ITEMS["work-0"].text);
   let armed = false;
   $("#clear-all").onclick = async e => { if(!armed){ armed = true; e.currentTarget.textContent = "再撳一次确认删除"; return; }
     await dbClear(); store = {days:{}, practiced:{}, reviewed:{}, rate:store.rate, showJp:store.showJp}; saveStore(); renderStats(); updateReviewBanner(); closeSheet(); };
